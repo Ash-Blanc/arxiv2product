@@ -35,6 +35,7 @@ PRIORITY_SECTION_KEYS = [
     "conclusion",
     "discussion",
 ]
+SPAWN_TIMEOUT_SECONDS = 30.0
 FULL_SECTION_CHARS = 8_000
 FULL_CONTEXT_CHARS = 80_000
 COMPACT_SECTION_CHARS = 2_500
@@ -106,7 +107,15 @@ async def spawn_agent(**kwargs):
     if "listener" not in kwargs and not _agent_logs_enabled():
         kwargs["listener"] = None
     try:
-        return await spawn(**kwargs)
+        return await asyncio.wait_for(
+            spawn(**kwargs),
+            timeout=SPAWN_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError as exc:
+        raise AgenticaConnectionError(
+            f"Timed out after {SPAWN_TIMEOUT_SECONDS}s waiting for Agentica "
+            f"to create an agent. {_agentica_connection_help()}"
+        ) from exc
     except httpx.TimeoutException as exc:
         raise AgenticaConnectionError(_agentica_connection_help()) from exc
     except httpx.HTTPError as exc:
@@ -137,6 +146,15 @@ async def call_agent_text(
         )
     except BaseException as exc:
         raise AgentExecutionError(_format_agent_error(phase, exc)) from exc
+    finally:
+        # Attempt graceful teardown so Agentica finalizers don't outlive the
+        # pipeline.  If the agent has no .close(), silently skip.
+        close = getattr(agent, "close", None)
+        if close is not None:
+            try:
+                await asyncio.wait_for(asyncio.shield(close()), timeout=5.0)
+            except Exception:
+                pass  # best-effort; don't mask the real error
 
 
 async def gather_agent_calls(calls: dict[str, Awaitable[str]]) -> dict[str, str]:
