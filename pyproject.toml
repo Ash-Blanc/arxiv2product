@@ -1,0 +1,16 @@
+[project]
+name = "arxiv2product"
+version = "0.1.0"
+description = "Generate product ideas from arXiv papers with a multi-agent pipeline."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "arxiv",
+    "httpx",
+    "pdfplumber",
+    "python-dotenv",
+    "symbolica-agentica",
+]
+
+[project.scripts]
+arxiv2product = "arxiv2product.cli:run"
