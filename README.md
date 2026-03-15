@@ -1,6 +1,6 @@
 # arxiv2product
 
-Transforms arXiv research papers into SaaS product opportunity reports using a multi-agent AI pipeline.
+Transforms arXiv research papers into company/product opportunity reports using a multi-agent AI pipeline.
 
 ## Setup
 
@@ -14,18 +14,40 @@ cp .env.example .env   # fill in your keys
 
 ```bash
 cd cli
+
+# Generate a report
 uv run arxiv2product 2603.09229
 uv run arxiv2product https://arxiv.org/abs/2603.09229
-uv run arxiv2product-api   # start the local API service
+
+# Start the API service
+uv run arxiv2product-api
+```
+
+## API Endpoints
+
+- `GET  /health`
+- `GET  /dashboard/{userId}`
+- `POST /reports`
+- `GET  /reports/{jobId}`
+- `POST /feedback/score`
+
+## Tests
+
+```bash
+cd cli
+python -m unittest discover -s tests
 ```
 
 ## Repository Layout
 
 - `cli/` — Python package, pipeline, API service, and tests
-- `logs/` — generated logs (ignored)
-- `data/` — generated local data (ignored)
+- `cli/agentica-docs.md` — Agentica framework reference
+- `cli/.env.example` — environment variable reference
 
-## Notes
+## Configuration
 
-- Generated reports and runtime SQLite data stay out of version control.
-- Set `EXECUTION_BACKEND=agentica` (default) or `openai_compatible` in `.env`.
+Copy `cli/.env.example` to `cli/.env` and set:
+
+- `EXECUTION_BACKEND` — `agentica` (default) or `openai_compatible`
+- `AGENTICA_API_KEY` or `OPENROUTER_API_KEY` depending on backend
+- `SERPER_API_KEY` / `EXA_API_KEY` for web search

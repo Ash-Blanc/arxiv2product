@@ -21,7 +21,10 @@ products_*.md
 data/
 
 # CLI app outputs
+cli/.venv/
 cli/.pytest_cache/
+cli/__pycache__/
+cli/*.egg-info/
 cli/data/
 cli/logs/
 cli/.env
