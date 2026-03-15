@@ -11,10 +11,7 @@ from time import perf_counter
 import arxiv
 
 from .backend import (
-    AGENTICA_BACKEND,
     OPENAI_COMPATIBLE_BACKEND,
-    OpenAICompatibleBackend,
-    build_openai_compatible_backend,
     get_execution_backend_name,
 )
 from .errors import AgentExecutionError
@@ -79,6 +76,11 @@ async def _arxiv_search(query: str, max_results: int = PAPER_SEARCH_MAX_RESULTS)
 def _make_arxiv_search_tool():
     """Create an arxiv search tool callable for agent scope."""
     async def arxiv_search_tool(query: str) -> str:
+        """Search the arXiv database for research papers.
+        
+        Args:
+            query: The search string to query arXiv.
+        """
         return await _arxiv_search(query)
     return arxiv_search_tool
 
@@ -122,14 +124,12 @@ def _parse_selector_output(text: str) -> list[PaperSearchResult]:
     return results
 
 
-async def _run_paper_search_agentica(
+async def _run_paper_search(
     topic: str,
     model: str,
 ) -> list[PaperSearchResult]:
-    """Run paper search using Agentica backend."""
+    """Run paper search using Agno backend."""
     import asyncio
-
-    from agentica import spawn
 
     from .pipeline import call_agent_text, spawn_agent
 
@@ -174,32 +174,6 @@ async def _run_paper_search_agentica(
     )
     return _parse_selector_output(selector_output)
 
-
-async def _run_paper_search_direct(
-    topic: str,
-    model: str,
-    backend: OpenAICompatibleBackend,
-) -> list[PaperSearchResult]:
-    """Run paper search using OpenAI-compatible backend (no tool use, simpler)."""
-    from .pipeline import call_direct_text
-
-    # Do an arXiv search ourselves and feed results to the LLM for ranking
-    search_results = await _arxiv_search(topic)
-
-    selector_output = await call_direct_text(
-        backend,
-        system_prompt=PAPER_SELECTOR_PREMISE,
-        user_prompt=(
-            f"Topic: {topic}\n\n"
-            f"Candidate papers:\n{search_results}\n\n"
-            "Score and rank these papers. Return the top 3-5 as a JSON array."
-        ),
-        phase="paper search: selection",
-        model=model,
-    )
-    return _parse_selector_output(selector_output)
-
-
 async def _enrich_candidates(crawler_output: str) -> str:
     """Extract arXiv IDs from crawler output and fetch their abstracts."""
     ids = re.findall(r"\b(\d{4}\.\d{4,5})\b", crawler_output)
@@ -227,13 +201,7 @@ async def run_paper_search(
     started_at = perf_counter()
     print(f"🔍 Paper search: discovering papers for topic: {topic}")
 
-    backend_name = get_execution_backend_name()
-    if backend_name == OPENAI_COMPATIBLE_BACKEND:
-        backend = build_openai_compatible_backend()
-        results = await _run_paper_search_direct(topic, model, backend)
-    else:
-        results = await _run_paper_search_agentica(topic, model)
-
+    results = await _run_paper_search(topic, model)
     elapsed = perf_counter() - started_at
     print(f"  ✅ Paper search complete in {elapsed:.1f}s — found {len(results)} papers")
     for i, r in enumerate(results, 1):

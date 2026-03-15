@@ -11,7 +11,8 @@ dependencies = [
     "pdfplumber",
     "pydantic",
     "python-dotenv",
-    "symbolica-agentica",
+    "agno",
+    "openai",
     "uvicorn",
 ]
 

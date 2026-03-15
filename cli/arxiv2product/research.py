@@ -338,6 +338,11 @@ def make_web_search_tool(
     calls_used = 0
 
     async def web_search(query: str) -> str:
+        """Search the web for real-time information.
+
+        Args:
+            query: The search query to execute.
+        """
         nonlocal calls_used
         if calls_used >= _get_max_calls_per_tool():
             if trace is not None:
@@ -365,6 +370,7 @@ def make_disabled_web_search_tool(message: str | None = None):
     )
 
     async def web_search(_: str) -> str:
+        """Search the web for real-time information (currently disabled)."""
         return disabled_message
 
     return web_search

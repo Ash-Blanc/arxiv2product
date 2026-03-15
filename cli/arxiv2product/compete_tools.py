@@ -101,9 +101,7 @@ async def _tinyfish_browse(url: str, goal: str) -> str:
                 elif '"type":"ERROR"' in payload:
                     return f"[tinyfish_browse error] {payload[:400]}"
 
-    if not result_text:
-        return f"[tinyfish_browse] No result from: {url}"
-    return f"[tinyfish_browse url={url}]\n{result_text[:2000]}"
+        return "[tinyfish_browse url=" + url + "]\n" + result_text[:2000]
 
 
 def make_parallel_search_tool(max_calls: int = 3) -> Callable:

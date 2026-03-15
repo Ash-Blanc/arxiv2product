@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .errors import AgentExecutionError, AgenticaConnectionError
+from .errors import AgentExecutionError
 from .prompts import DEFAULT_MODEL
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
@@ -39,9 +39,6 @@ async def main() -> None:
     model = sys.argv[2] if len(sys.argv) > 2 else os.getenv("ARXIV2PRODUCT_MODEL", DEFAULT_MODEL)
     try:
         await run_pipeline(paper_id, model=model)
-    except AgenticaConnectionError as exc:
-        print(f"Agentica connection error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
     except AgentExecutionError as exc:
         print(f"Agent execution error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc

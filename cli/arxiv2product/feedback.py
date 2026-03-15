@@ -4,8 +4,8 @@ import json
 import os
 from dataclasses import asdict, dataclass
 
-from .backend import build_openai_compatible_backend
 from .errors import AgentExecutionError
+from .pipeline import call_agent_text, spawn_agent
 
 SCORING_PROMPT = """\
 You score reviewer feedback for an AI-generated product report.
@@ -105,22 +105,30 @@ async def score_feedback(
     if not _can_use_ai_scoring():
         return heuristic
 
-    backend = build_openai_compatible_backend()
     try:
-        payload = await backend.generate_text(
-            system_prompt=SCORING_PROMPT,
-            user_prompt=(
+        agent = await spawn_agent(
+            premise=SCORING_PROMPT,
+            model=model or os.getenv("ARXIV2PRODUCT_MODEL", "gpt-4o-mini"),
+        )
+        payload = await call_agent_text(
+            agent,
+            (
                 f"Report title: {report_title}\n"
                 f"Report summary: {report_summary}\n"
                 f"Honesty rating: {honesty_rating}/5\n"
                 f"Usefulness rating: {usefulness_rating}/5\n"
                 f"Feedback:\n{detailed_feedback}\n"
             ),
-            model=model or os.getenv("ARXIV2PRODUCT_MODEL", "openai/gpt-4.1-mini"),
             phase="feedback scoring",
-            max_tokens=240,
         )
-        parsed = json.loads(payload)
+        # Find JSON boundaries just in case it's wrapped in markdown
+        payload = payload.strip()
+        if payload.startswith("```json"):
+            payload = payload.removeprefix("```json")
+        if payload.endswith("```"):
+            payload = payload.removesuffix("```")
+            
+        parsed = json.loads(payload.strip())
     except (AgentExecutionError, ValueError, TypeError, json.JSONDecodeError):
         return heuristic
 

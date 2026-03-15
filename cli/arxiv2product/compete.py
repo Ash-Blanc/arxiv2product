@@ -13,7 +13,7 @@ from time import perf_counter
 
 from dotenv import load_dotenv
 
-from .errors import AgentExecutionError, AgenticaConnectionError
+from .errors import AgentExecutionError
 from .prompts import DEFAULT_MODEL
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
@@ -81,12 +81,12 @@ def _check_api_keys() -> None:
         raise SystemExit(1)
 
 
-async def _run_idea_intel_agentica(
+async def _run_idea_intel(
     idea: IdeaContext,
     model: str,
     max_browse_calls: int,
 ) -> str:
-    """Run competitor intelligence for a single idea using Agentica."""
+    """Run competitor intelligence for a single idea using Agno."""
     from .compete_prompts import COMPETITOR_INTEL_PREMISE
     from .compete_tools import make_parallel_search_tool, make_tinyfish_browse_tool
     from .pipeline import call_agent_text, spawn_agent
@@ -106,45 +106,6 @@ async def _run_idea_intel_agentica(
     )
 
 
-async def _run_idea_intel_direct(
-    idea: IdeaContext,
-    model: str,
-    backend,
-) -> str:
-    """Run competitor intelligence for a single idea using direct backend.
-
-    Without tool use, we pre-fetch search results and pass them as context.
-    """
-    from .compete_prompts import COMPETITOR_INTEL_PREMISE
-    from .compete_tools import _parallel_search
-    from .pipeline import call_direct_text
-
-    # Pre-fetch search context
-    search_context = ""
-    try:
-        search_context = await _parallel_search(
-            objective=f"Competitors and market landscape for: {idea.name}",
-            queries=[
-                f"{idea.name} competitors market",
-                f"{idea.name} funding startup landscape",
-            ],
-        )
-    except Exception:
-        search_context = "[Search unavailable]"
-
-    return await call_direct_text(
-        backend,
-        system_prompt=COMPETITOR_INTEL_PREMISE,
-        user_prompt=(
-            f"Run competitive intelligence for this company idea:\n\n{idea.content}\n\n"
-            f"Pre-fetched market research:\n{search_context}\n\n"
-            "Analyze the competitive landscape based on this evidence."
-        ),
-        phase=f"competitor intel: {idea.name}",
-        model=model,
-    )
-
-
 async def run_compete(
     report_path: str,
     idea_indices: list[int] | None = None,
@@ -152,11 +113,6 @@ async def run_compete(
     model: str = DEFAULT_MODEL,
 ) -> str:
     """Run competitor intelligence on ideas from an existing report."""
-    from .backend import (
-        OPENAI_COMPATIBLE_BACKEND,
-        build_openai_compatible_backend,
-        get_execution_backend_name,
-    )
 
     _check_api_keys()
 
@@ -182,23 +138,13 @@ async def run_compete(
 
     max_ideas = _get_max_ideas()
     ideas = ideas[:max_ideas]
-    max_browse = _get_max_browse_calls()
-    backend_name = get_execution_backend_name()
-
     print(f"🔍 Running competitor intelligence on {len(ideas)} idea(s)...")
     started_at = perf_counter()
 
-    if backend_name == OPENAI_COMPATIBLE_BACKEND:
-        backend = build_openai_compatible_backend()
-        tasks = {
-            idea.name: _run_idea_intel_direct(idea, model, backend)
-            for idea in ideas
-        }
-    else:
-        tasks = {
-            idea.name: _run_idea_intel_agentica(idea, model, max_browse)
-            for idea in ideas
-        }
+    tasks = {
+        idea.name: _run_idea_intel(idea, model, max_browse)
+        for idea in ideas
+    }
 
     # Run all ideas in parallel
     names = list(tasks)
@@ -294,9 +240,6 @@ async def main() -> None:
             idea_name=args.idea,
             model=args.model,
         )
-    except AgenticaConnectionError as exc:
-        print(f"Agentica connection error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
     except AgentExecutionError as exc:
         print(f"Agent execution error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
