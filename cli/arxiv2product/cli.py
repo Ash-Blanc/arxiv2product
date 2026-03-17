@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -14,8 +15,29 @@ from .prompts import DEFAULT_MODEL
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_ROOT = PACKAGE_ROOT.parent
 
-load_dotenv(PACKAGE_ROOT / ".env")
-load_dotenv(WORKSPACE_ROOT / ".env")
+checked = []
+for env_path in [
+    Path.cwd() / ".env",
+    Path.cwd() / "cli" / ".env",
+    WORKSPACE_ROOT / ".env",
+    WORKSPACE_ROOT / "cli" / ".env",
+    PACKAGE_ROOT / ".env",
+    Path.home() / ".arxiv2product" / ".env",
+]:
+    checked.append(str(env_path))
+    if env_path.exists():
+        load_dotenv(env_path, override=True)
+        break
+
+if not os.getenv("AGENTICA_API_KEY"):
+    print(
+        f"[WARN] AGENTICA_API_KEY not found after checking: {checked}", file=sys.stderr
+    )
+else:
+    print(
+        f"[OK] AGENTICA_API_KEY loaded: {os.getenv('AGENTICA_API_KEY')[:8]}...",
+        file=sys.stderr,
+    )
 
 
 def print_banner() -> None:
