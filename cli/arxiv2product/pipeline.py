@@ -88,7 +88,11 @@ def _get_phase_timeout_seconds() -> float:
 
 
 def _redteam_search_enabled() -> bool:
-    return os.getenv("ENABLE_REDTEAM_SEARCH", "0").strip().lower() in {"1", "true", "yes"}
+    return os.getenv("ENABLE_REDTEAM_SEARCH", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 def _agent_logs_enabled() -> bool:
@@ -212,7 +216,9 @@ async def call_direct_text(
 
 async def gather_agent_calls(calls: dict[str, Awaitable[str]]) -> dict[str, str]:
     names = list(calls)
-    results = await asyncio.gather(*(calls[name] for name in names), return_exceptions=True)
+    results = await asyncio.gather(
+        *(calls[name] for name in names), return_exceptions=True
+    )
 
     failures: list[str] = []
     outputs: dict[str, str] = {}
@@ -332,7 +338,9 @@ def _build_paper_context(
         f"AUTHORS: {', '.join(paper.authors[:10])}\n"
         f"ABSTRACT: {paper.abstract}\n\n"
         f"KEY SECTIONS:\n"
-        + "\n\n".join(f"=== {name} ===\n{content}" for name, content in key_sections.items())
+        + "\n\n".join(
+            f"=== {name} ===\n{content}" for name, content in key_sections.items()
+        )
         + "\n\nFIGURE CAPTIONS:\n"
         + "\n".join(paper.figures_captions[:figure_count])
         + "\n\nTABLE SUMMARIES:\n"
@@ -374,7 +382,9 @@ def build_compact_paper_context(
     )
 
 
-async def _run_pipeline_with_agentica(arxiv_id_or_url: str, model: str = DEFAULT_MODEL) -> str:
+async def _run_pipeline_with_agentica(
+    arxiv_id_or_url: str, model: str = DEFAULT_MODEL
+) -> str:
     """Run the pipeline using Agentica as the execution backend."""
     if not _agent_logs_enabled():
         set_default_agent_listener(None)
@@ -593,7 +603,9 @@ async def _run_pipeline_with_openai_compatible(
     pain_trace = SearchTrace(section_name="Market Pain Mapping")
     temporal_trace = SearchTrace(section_name="Temporal Arbitrage")
 
-    phase_started_at = _phase_started("🚀 Phase 2: Running parallel analysis backend calls...")
+    phase_started_at = _phase_started(
+        "🚀 Phase 2: Running parallel analysis backend calls..."
+    )
 
     async def get_pain_raw():
         pain_search_packet = await build_search_packet(
@@ -708,7 +720,9 @@ async def _run_pipeline_with_openai_compatible(
         model=model,
         max_tokens=_phase_max_tokens("red team destruction"),
     )
-    _phase_finished("Phase 4", phase_started_at, details="(direct backend, no live red-team search)")
+    _phase_finished(
+        "Phase 4", phase_started_at, details="(direct backend, no live red-team search)"
+    )
 
     phase_started_at = _phase_started("🎯 Phase 5: Final synthesis...")
     final_raw = await call_direct_text(
@@ -753,7 +767,14 @@ async def _run_pipeline_with_openai_compatible(
     return str(output_path)
 
 
-async def run_pipeline(arxiv_id_or_url: str, model: str = DEFAULT_MODEL) -> str:
+async def run_pipeline(
+    arxiv_id_or_url: str,
+    model: str = DEFAULT_MODEL,
+    save: bool = True,
+    output_path: Optional[str] = None,
+    display: bool = False,
+    quiet: bool = False,
+) -> str:
     """Run the paper-to-product pipeline using the configured execution backend."""
     # Phase 0 (optional): PASA-style paper search for topic queries
     if _paper_search_enabled() and is_topic_query(arxiv_id_or_url):
@@ -769,5 +790,7 @@ async def run_pipeline(arxiv_id_or_url: str, model: str = DEFAULT_MODEL) -> str:
     backend_name = get_execution_backend_name()
     if backend_name == OPENAI_COMPATIBLE_BACKEND:
         backend = build_openai_compatible_backend()
-        return await _run_pipeline_with_openai_compatible(arxiv_id_or_url, model, backend)
+        return await _run_pipeline_with_openai_compatible(
+            arxiv_id_or_url, model, backend
+        )
     return await _run_pipeline_with_agentica(arxiv_id_or_url, model)

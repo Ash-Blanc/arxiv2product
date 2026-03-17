@@ -1,9 +1,9 @@
-import asyncio
 import os
-import sys
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
+from click import Group, command, option, argument, echo
 
 from .errors import AgentExecutionError, AgenticaConnectionError
 from .prompts import DEFAULT_MODEL
@@ -15,37 +15,46 @@ load_dotenv(PACKAGE_ROOT / ".env")
 load_dotenv(WORKSPACE_ROOT / ".env")
 
 
-USAGE = """\
-Usage: uv run arxiv2product <arxiv_id_or_url> [model]
-   or: uv run python main.py <arxiv_id_or_url> [model]
-   or: python -m arxiv2product <arxiv_id_or_url> [model]
-
-Examples:
-  uv run arxiv2product 2603.09229
-  uv run python main.py 2603.09229
-  python -m arxiv2product 2603.09229
-  uv run arxiv2product https://alphaxiv.org/abs/2603.09229 openrouter:google/gemini-2.5-pro
-"""
-
-
-async def main() -> None:
-    if len(sys.argv) < 2:
-        print(USAGE)
-        raise SystemExit(1)
+@command()
+@argument("arxiv_id_or_url")
+@option("--model", default=DEFAULT_MODEL, help="LLM model to use")
+@option("--save", is_flag=True, help="Save report to file")
+@option("--output", type=click.Path(), help="Output file path")
+@option("--display", is_flag=True, help="Display report in terminal")
+@option("--quiet", is_flag=True, help="Suppress progress output")
+async def cli(
+    arxiv_id_or_url: str,
+    model: str = DEFAULT_MODEL,
+    save: bool = False,
+    output: Optional[str] = None,
+    display: bool = False,
+    quiet: bool = False,
+):
+    """Generate product ideas from arXiv papers with a multi-agent pipeline."""
+    if not quiet:
+        echo(f"📄 Processing: {arxiv_id_or_url}")
+        echo(f"⚙️ Model: {model}")
 
     from .pipeline import run_pipeline
 
-    paper_id = sys.argv[1]
-    model = sys.argv[2] if len(sys.argv) > 2 else os.getenv("ARXIV2PRODUCT_MODEL", DEFAULT_MODEL)
     try:
-        await run_pipeline(paper_id, model=model)
+        report_path = await run_pipeline(
+            arxiv_id_or_url,
+            model=model,
+            save=save,
+            output_path=output,
+            display=display,
+            quiet=quiet,
+        )
+
+        if not quiet:
+            if save or output:
+                echo(f"✅ Report saved to: {report_path}")
+            else:
+                echo(f"✅ Processing complete: {arxiv_id_or_url}")
     except AgenticaConnectionError as exc:
-        print(f"Agentica connection error: {exc}", file=sys.stderr)
+        echo(f"❌ Agentica connection error: {exc}", err=True)
         raise SystemExit(1) from exc
     except AgentExecutionError as exc:
-        print(f"Agent execution error: {exc}", file=sys.stderr)
+        echo(f"❌ Agent execution error: {exc}", err=True)
         raise SystemExit(1) from exc
-
-
-def run() -> None:
-    asyncio.run(main())

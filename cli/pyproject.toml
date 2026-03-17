@@ -13,10 +13,11 @@ dependencies = [
     "python-dotenv",
     "symbolica-agentica",
     "uvicorn",
+    "click",
 ]
 
 [project.scripts]
-arxiv2product = "arxiv2product.cli:run"
+arxiv2product = "arxiv2product.cli:cli"
 arxiv2product-api = "arxiv2product.service:run"
 arxiv2product-compete = "arxiv2product.compete:run"
 
