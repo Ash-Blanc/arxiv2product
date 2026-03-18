@@ -280,12 +280,7 @@ def init():
 
 
 def main():
-    description = (
-        "Transforms arXiv research papers into company/product opportunity reports "
-        "using a multi-agent AI pipeline. Analyzes technical primitives through "
-        "adversarial phases (Decomposer, Pain Scanner, Infra Inversion, Temporal, Red Team) "
-        "to generate ranked company ideas with market moats and execution plans."
-    )
+    description = "Transform arXiv research papers into company/product opportunity reports."
     group = cli2.Group("arxiv2product", description)
     group.cmd(analyze)
     group.cmd(compete)
