@@ -98,6 +98,9 @@ def _agent_logs_enabled() -> bool:
     return os.getenv("ENABLE_AGENT_LOGS", "0").strip().lower() in {"1", "true", "yes"}
 
 
+from rich.console import Console
+console = Console()
+
 def _truncate_text(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
@@ -105,14 +108,14 @@ def _truncate_text(text: str, limit: int) -> str:
 
 
 def _phase_started(label: str) -> float:
-    print(label)
+    console.print(label)
     return perf_counter()
 
 
 def _phase_finished(label: str, started_at: float, details: str = "") -> None:
     elapsed = perf_counter() - started_at
     suffix = f" {details}" if details else ""
-    print(f"  ✅ {label} complete in {elapsed:.1f}s{suffix}")
+    console.print(f"  ✅ {label} complete in {elapsed:.1f}s{suffix}")
 
 
 def _phase_max_tokens(phase: str) -> int | None:
@@ -388,13 +391,13 @@ async def _run_pipeline_with_agentica(
     if not _agent_logs_enabled():
         set_default_agent_listener(None)
     speed_profile = _get_speed_profile()
-    print(f"📄 Fetching paper: {arxiv_id_or_url}")
+    console.print(f"📄 Fetching paper: {arxiv_id_or_url}")
     paper = await fetch_paper(arxiv_id_or_url)
-    print(f"✅ Loaded: {paper.title} ({len(paper.full_text)} chars)")
-    print(f"⚙️ Speed profile: {speed_profile}")
+    console.print(f"✅ Loaded: {paper.title} ({len(paper.full_text)} chars)")
+    console.print(f"⚙️ Speed profile: {speed_profile}")
 
     full_context = build_full_paper_context(paper)
-    print(f"🧠 Phase 1 context: {len(full_context)} chars")
+    console.print(f"🧠 Phase 1 context: {len(full_context)} chars")
 
     phase_started_at = _phase_started("🔬 Phase 1: Extracting technical primitives...")
     decomposer = await spawn_agent(premise=DECOMPOSER_PREMISE, model=model)
@@ -409,7 +412,7 @@ async def _run_pipeline_with_agentica(
         paper,
         primitives_summary=primitives_summary,
     )
-    print(f"🧠 Downstream context: {len(compact_context)} chars")
+    console.print(f"🧠 Downstream context: {len(compact_context)} chars")
 
     phase_started_at = _phase_started("🚀 Phase 2: Running parallel analysis agents...")
     pain_trace = SearchTrace(section_name="Market Pain Mapping")
@@ -559,8 +562,8 @@ async def _run_pipeline_with_agentica(
     output_path = Path(f"products_{safe_id}.md")
     output_path.write_text(report, encoding="utf-8")
 
-    print(f"\n✅ Done! Report saved to: {output_path}")
-    print(f"   {len(report)} chars, ~{len(report.splitlines())} lines")
+    console.print(f"\n✅ Done! Report saved to: {output_path}")
+    console.print(f"   {len(report)} chars, ~{len(report.splitlines())} lines")
     return str(output_path)
 
 
@@ -569,14 +572,14 @@ async def _run_pipeline_with_openai_compatible(
     model: str,
     backend: OpenAICompatibleBackend,
 ) -> str:
-    print(f"📄 Fetching paper: {arxiv_id_or_url}")
+    console.print(f"📄 Fetching paper: {arxiv_id_or_url}")
     paper = await fetch_paper(arxiv_id_or_url)
-    print(f"✅ Loaded: {paper.title} ({len(paper.full_text)} chars)")
-    print("⚙️ Execution backend: openai_compatible")
-    print(f"⚙️ Speed profile: {_get_speed_profile()}")
+    console.print(f"✅ Loaded: {paper.title} ({len(paper.full_text)} chars)")
+    console.print("⚙️ Execution backend: openai_compatible")
+    console.print(f"⚙️ Speed profile: {_get_speed_profile()}")
 
     full_context = build_full_paper_context(paper)
-    print(f"🧠 Phase 1 context: {len(full_context)} chars")
+    console.print(f"🧠 Phase 1 context: {len(full_context)} chars")
 
     phase_started_at = _phase_started("🔬 Phase 1: Extracting technical primitives...")
     primitives_raw = await call_direct_text(
@@ -597,7 +600,7 @@ async def _run_pipeline_with_openai_compatible(
         paper,
         primitives_summary=primitives_summary,
     )
-    print(f"🧠 Downstream context: {len(compact_context)} chars")
+    console.print(f"🧠 Downstream context: {len(compact_context)} chars")
 
     pain_trace = SearchTrace(section_name="Market Pain Mapping")
     temporal_trace = SearchTrace(section_name="Temporal Arbitrage")
@@ -761,8 +764,8 @@ async def _run_pipeline_with_openai_compatible(
     output_path = Path(f"products_{safe_id}.md")
     output_path.write_text(report, encoding="utf-8")
 
-    print(f"\n✅ Done! Report saved to: {output_path}")
-    print(f"   {len(report)} chars, ~{len(report.splitlines())} lines")
+    console.print(f"\n✅ Done! Report saved to: {output_path}")
+    console.print(f"   {len(report)} chars, ~{len(report.splitlines())} lines")
     return str(output_path)
 
 
@@ -784,7 +787,7 @@ async def run_pipeline(
                 f"Paper search found no relevant papers for topic: {arxiv_id_or_url}"
             )
         top_paper = results[0]
-        print(f"📄 Selected top paper: [{top_paper.arxiv_id}] {top_paper.title}")
+        console.print(f"📄 Selected top paper: [{top_paper.arxiv_id}] {top_paper.title}")
         arxiv_id_or_url = top_paper.arxiv_id
 
     backend_name = get_execution_backend_name()

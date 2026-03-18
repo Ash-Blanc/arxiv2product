@@ -164,13 +164,14 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "arxiv" },
-    { name = "click" },
+    { name = "cli2" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pdfplumber" },
     { name = "pydantic" },
     { name = "pyfiglet" },
     { name = "python-dotenv" },
+    { name = "rich" },
     { name = "symbolica-agentica" },
     { name = "uvicorn" },
 ]
@@ -178,13 +179,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "arxiv" },
-    { name = "click" },
+    { name = "cli2" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pdfplumber" },
     { name = "pydantic" },
     { name = "pyfiglet" },
     { name = "python-dotenv" },
+    { name = "rich" },
     { name = "symbolica-agentica" },
     { name = "uvicorn" },
 ]
@@ -322,6 +324,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/91/52b0841c71f152f563b8e072896c14e3d83b195c188b338d3cc2e582d1d4/charset_normalizer-3.4.5-cp314-cp314-win_arm64.whl", hash = "sha256:97ab7787092eb9b50fb47fa04f24c75b768a606af1bcba1957f07f128a7219e4", size = 133775, upload-time = "2026-03-06T06:02:27.473Z" },
     { url = "https://files.pythonhosted.org/packages/c5/60/3a621758945513adfd4db86827a5bafcc615f913dbd0b4c2ed64a65731be/charset_normalizer-3.4.5-py3-none-any.whl", hash = "sha256:9db5e3fcdcee89a78c04dffb3fe33c79f77bd741a624946db2591c81b2fc85b0", size = 55455, upload-time = "2026-03-06T06:03:17.827Z" },
 ]
+
+[[package]]
+name = "cli2"
+version = "5.2.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docstring-parser" },
+    { name = "pygments" },
+    { name = "pyyaml" },
+    { name = "structlog" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/08/70/3e0086f16b8a72ae35a80c3b4d593d3c7014600aca33abe6ee5e5145376b/cli2-5.2.3.tar.gz", hash = "sha256:592b8f7753e5a67e19daf0b3f62a82765dc444d8a2447a8f1040b83ac7b522ee", size = 62874, upload-time = "2025-04-09T18:03:24.254Z" }
 
 [[package]]
 name = "click"
@@ -2028,6 +2042,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c4/68/79977123bb7be889ad680d79a40f339082c1978b5cfcf62c2d8d196873ac/starlette-0.52.1.tar.gz", hash = "sha256:834edd1b0a23167694292e94f597773bc3f89f362be6effee198165a35d62933", size = 2653702, upload-time = "2026-01-18T13:34:11.062Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/0d/13d1d239a25cbfb19e740db83143e95c772a1fe10202dda4b76792b114dd/starlette-0.52.1-py3-none-any.whl", hash = "sha256:0029d43eb3d273bc4f83a08720b4912ea4b071087a3b48db01b7c839f7954d74", size = 74272, upload-time = "2026-01-18T13:34:09.188Z" },
+]
+
+[[package]]
+name = "structlog"
+version = "25.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/52/9ba0f43b686e7f3ddfeaa78ac3af750292662284b3661e91ad5494f21dbc/structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98", size = 1460830, upload-time = "2025-10-27T08:28:23.028Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a8/45/a132b9074aa18e799b891b91ad72133c98d8042c70f6240e4c5f9dabee2f/structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f", size = 72510, upload-time = "2025-10-27T08:28:21.535Z" },
 ]
 
 [[package]]

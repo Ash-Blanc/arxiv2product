@@ -21,8 +21,10 @@ Output: A ranked list of 4-6 company ideas with market analysis, moats, and firs
 ```bash
 cd cli
 uv sync
-cp .env.example .env   # fill in your API keys
+uv run arxiv2product init   # interactive setup for API keys
 ```
+
+The `init` command will prompt you for required keys and save them to `~/.arxiv2product/.env`.
 
 **Required keys:**
 - `AGENTICA_API_KEY` (default backend) — or use OpenRouter with `OPENROUTER_API_KEY`
@@ -38,10 +40,10 @@ cp .env.example .env   # fill in your API keys
 cd cli
 
 # From an arXiv ID
-uv run arxiv2product 2603.09229
+uv run arxiv2product analyze 2603.09229
 
-# From an arXiv URL
-uv run arxiv2product https://arxiv.org/abs/2603.09229
+# Automatically open the report when finished
+uv run arxiv2product analyze 2603.09229 --open
 ```
 
 Output: `products_2603_09229.md` — a markdown report with ranked company ideas.
@@ -51,23 +53,14 @@ Output: `products_2603_09229.md` — a markdown report with ranked company ideas
 **When you don't have a specific paper yet.** Instead of an arXiv ID, pass a research topic:
 
 ```bash
-# Enable topic discovery in .env
-ENABLE_PAPER_SEARCH=1
-
-# Then run with any topic
-uv run arxiv2product "self-adapting language models"
-uv run arxiv2product "quantum error correction for NISQ devices"
+# Enable topic discovery in .env or via environment variable
+ENABLE_PAPER_SEARCH=1 uv run arxiv2product analyze "self-adapting language models" --search-papers
 ```
 
 The pipeline will:
 1. Run a PASA-style Crawler agent to find relevant papers (arXiv + web search)
 2. Run a Selector agent to score and rank them
 3. Pick the top paper and run the full 5-phase analysis
-
-**When to use:** Early-stage exploration when you're researching a field, not a specific paper.
-
-**Env vars:**
-- `ENABLE_PAPER_SEARCH=1` — enable this mode (off by default)
 
 ---
 
@@ -77,37 +70,18 @@ The pipeline will:
 
 ```bash
 # After generating a report, analyze its top ideas
-uv run arxiv2product-compete products_2603_09229.md
+uv run arxiv2product compete products_2603_09229.md
 
 # Analyze only specific ideas by rank
-uv run arxiv2product-compete products_2603_09229.md --ideas 1,2
+uv run arxiv2product compete products_2603_09229.md --ideas 1,2
 
 # Analyze a specific idea by name
-uv run arxiv2product-compete products_2603_09229.md --idea "ModelGuard"
+uv run arxiv2product compete products_2603_09229.md --idea "ModelGuard"
 ```
-
-**Why post-pipeline?**
-- Competitor research is expensive (API calls, browser automation)
-- You may only care about ideas #1 and #2, not all 5
-- The main pipeline is already long enough — no need to add 60-90s to every run
-- Competitive data has a shorter shelf-life than technical analysis → should be refreshable independently
-
-**What it does:**
-- Identifies the competitive landscape (direct competitors, adjacent players, open-source alternatives)
-- Deep-dives top 2 competitors (pricing, features, user complaints from G2/reviews)
-- Mines sentiment from Reddit/HN
-- Finds white space — what NO competitor does
-- Reassesses whether the idea's moat is real or assumed
-
-**Output:** `compete_products_2603_09229.md` — competitive intel appended to your report.
 
 **Required keys:**
 - `PARALLEL_API_KEY` — Parallel.ai search (broad web research)
 - `TINYFISH_API_KEY` — Tinyfish browser automation (deep site crawling)
-
-**Env vars:**
-- `COMPETE_MAX_IDEAS=3` — max ideas to analyze (default: 3)
-- `COMPETE_MAX_BROWSE_CALLS=4` — Tinyfish calls per idea (default: 4)
 
 ---
 
@@ -117,7 +91,7 @@ Run as a local FastAPI service:
 
 ```bash
 cd cli
-uv run arxiv2product-api
+uv run arxiv2product serve
 # Runs on http://127.0.0.1:8010
 ```
 
@@ -131,18 +105,6 @@ uv run arxiv2product-api
 | `GET` | `/reports/{jobId}` | Poll report status/result |
 | `POST` | `/feedback/score` | Submit feedback on a report |
 
-### Example: Create a Report
-
-```bash
-curl -X POST http://127.0.0.1:8010/reports \
-  -H "Content-Type: application/json" \
-  -d '{"paperRef": "2603.09229", "userId": "user-123"}'
-# Returns: {"id": "job-abc123", "status": "queued", ...}
-
-# Poll for result
-curl http://127.0.0.1:8010/reports/job-abc123
-```
-
 ---
 
 ## Configuration
@@ -153,49 +115,7 @@ The CLI looks for `.env` in this order:
 3. Project root (parent of cli): `../.env`
 4. `~/.arxiv2product/.env` (recommended for uv tool installations)
 
-Copy `cli/.env.example` to one of the above locations and configure:
-
-### Execution Backend
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `EXECUTION_BACKEND` | `agentica` | `agentica` or `openai_compatible` |
-| `AGENTICA_API_KEY` | — | Required for Agentica backend |
-| `OPENROUTER_API_KEY` | — | Required for OpenAI-compatible backend |
-| `OPENAI_BASE_URL` | `https://openrouter.ai/api/v1` | API endpoint for OpenAI-compatible |
-| `ARXIV2PRODUCT_MODEL` | `anthropic/claude-sonnet-4` | Model slug (OpenRouter format) |
-
-### Search APIs (used during pipeline phases)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SERPER_API_KEY` | — | Serper (Google search) API key |
-| `EXA_API_KEY` | — | Exa search API key |
-| `SEARCH_PROVIDER_MODE` | `auto` | `auto`, `serper`, or `exa` |
-| `SEARCH_NUM_RESULTS` | `3` | Results per query (max 10) |
-| `SEARCH_TIMEOUT_SECONDS` | `8` | Search timeout |
-| `SEARCH_MAX_CALLS_PER_AGENT` | `2` | Budget per agent instance |
-| `SEARCH_ENABLE_FALLBACK` | `0` | Enable provider fallback chain |
-
-### Pipeline Tuning
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PIPELINE_SPEED_PROFILE` | `balanced` | `balanced` or `exhaustive` |
-| `AGENT_PHASE_TIMEOUT_SECONDS` | `480` | Timeout per phase (Agentica) |
-| `DIRECT_BACKEND_TIMEOUT_SECONDS` | `240` | Timeout per phase (direct backend) |
-| `ENABLE_REDTEAM_SEARCH` | `0` | Enable live search during red team phase |
-| `ENABLE_AGENT_LOGS` | `0` | Enable verbose agent logging |
-
-### Add-ons
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ENABLE_PAPER_SEARCH` | `0` | Enable PASA-style topic discovery |
-| `PARALLEL_API_KEY` | — | Parallel.ai key for competitor intel |
-| `TINYFISH_API_KEY` | — | Tinyfish key for competitor intel |
-| `COMPETE_MAX_IDEAS` | `3` | Max ideas to analyze per compete run |
-| `COMPETE_MAX_BROWSE_CALLS` | `4` | Tinyfish calls per idea |
+Use `uv run arxiv2product init` to easily configure your environment.
 
 ---
 
@@ -213,25 +133,18 @@ uv run python -m unittest discover -s tests
 ```
 .
 ├── README.md
-├── AGENTS.md              # Repo guidelines for AI assistants
+├── GEMINI.md              # Contextual guide for AI assistants
 ├── cli/
 │   ├── .env.example       # Environment variable reference
-│   ├── pyproject.toml     # Package definition
+│   ├── pyproject.toml     # Package definition (cli2 + rich)
 │   ├── agentica-docs.md   # Agentica framework reference
 │   ├── main.py            # CLI entry point wrapper
 │   ├── arxiv2product/     # Package source
-│   │   ├── cli.py         # CLI orchestration
-│   │   ├── pipeline.py    # Core 5-phase pipeline
+│   │   ├── cli.py         # Unified CLI (analyze, compete, serve, init)
+│   │   ├── pipeline.py    # Core 5-phase pipeline (Rich output)
 │   │   ├── prompts.py     # Agent premises/prompts
 │   │   ├── paper_search.py    # PASA-style topic discovery
-│   │   ├── compete.py     # Competitor intel CLI
-│   │   ├── compete_tools.py   # Parallel.ai + Tinyfish tools
-│   │   ├── compete_prompts.py # Competitor intel prompt
-│   │   ├── backend.py     # Execution backend abstraction
-│   │   ├── research.py    # Web search (Serper/Exa)
-│   │   ├── ingestion.py   # arXiv fetch + PDF parse
-│   │   ├── reporting.py   # Markdown report builder
-│   │   ├── service.py     # FastAPI service
+│   │   ├── compete.py     # Competitor intel logic
 │   │   └── ...
 │   └── tests/             # Test suite
 ```
@@ -242,10 +155,11 @@ uv run python -m unittest discover -s tests
 
 | Goal | Command | Notes |
 |------|---------|-------|
-| Analyze a specific paper | `arxiv2product 2603.09229` | Standard 5-phase pipeline |
-| Explore a research area | `ENABLE_PAPER_SEARCH=1 arxiv2product "topic"` | Finds best paper, then analyzes |
-| Deep-dive on an idea | `arxiv2product-compete report.md --ideas 1,2` | Post-pipeline competitive intel |
-| Run as a service | `arxiv2product-api` | FastAPI on port 8010 |
+| Setup environment | `arxiv2product init` | Interactive API key config |
+| Analyze a specific paper | `arxiv2product analyze 2603.09229` | Standard 5-phase pipeline |
+| Explore a research area | `arxiv2product analyze "topic" --search-papers` | Finds best paper, then analyzes |
+| Deep-dive on an idea | `arxiv2product compete report.md` | Post-pipeline competitive intel |
+| Run as a service | `arxiv2product serve` | FastAPI on port 8010 |
 
 ---
 

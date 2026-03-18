@@ -6,6 +6,8 @@ import asyncio
 import json
 import os
 import re
+from rich.console import Console
+console = Console()
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -277,7 +279,7 @@ async def run_paper_search(
 ) -> list[PaperSearchResult]:
     """Run the PASA-style paper search pipeline. Returns ranked papers."""
     started_at = perf_counter()
-    print(f"🔍 Paper search: discovering papers for topic: {topic}")
+    console.print(f"🔍 Paper search: discovering papers for topic: {topic}")
 
     backend_name = get_execution_backend_name()
     if backend_name == OPENAI_COMPATIBLE_BACKEND:
@@ -287,8 +289,8 @@ async def run_paper_search(
         results = await _run_paper_search_agentica(topic, model)
 
     elapsed = perf_counter() - started_at
-    print(f"  ✅ Paper search complete in {elapsed:.1f}s — found {len(results)} papers")
+    console.print(f"  ✅ Paper search complete in {elapsed:.1f}s — found {len(results)} papers")
     for i, r in enumerate(results, 1):
-        print(f"     {i}. [{r.arxiv_id}] {r.title} (score={r.score:.2f})")
+        console.print(f"     {i}. [{r.arxiv_id}] {r.title} (score={r.score:.2f})")
 
     return results

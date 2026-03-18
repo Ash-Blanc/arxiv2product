@@ -6,6 +6,8 @@ import asyncio
 import os
 import re
 import sys
+from rich.console import Console
+console = Console()
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -72,11 +74,10 @@ def _check_api_keys() -> None:
     has_parallel = bool(os.getenv("PARALLEL_API_KEY"))
     has_tinyfish = bool(os.getenv("TINYFISH_API_KEY"))
     if not has_parallel and not has_tinyfish:
-        print(
-            "Error: No competitor intelligence API keys configured.\n"
+        console.print(
+            "[bold red]Error:[/bold red] No competitor intelligence API keys configured.\n"
             "Set PARALLEL_API_KEY and/or TINYFISH_API_KEY in your .env file.\n"
-            "See cli/.env.example for details.",
-            file=sys.stderr,
+            "See cli/.env.example for details."
         )
         raise SystemExit(1)
 
@@ -185,7 +186,7 @@ async def run_compete(
     max_browse = _get_max_browse_calls()
     backend_name = get_execution_backend_name()
 
-    print(f"🔍 Running competitor intelligence on {len(ideas)} idea(s)...")
+    console.print(f"🔍 Running competitor intelligence on {len(ideas)} idea(s)...")
     started_at = perf_counter()
 
     if backend_name == OPENAI_COMPATIBLE_BACKEND:
@@ -214,13 +215,13 @@ async def run_compete(
                 f"## Competitor Intelligence: {name}\n\n"
                 f"**Error**: {result}\n"
             )
-            print(f"  ⚠️ {name}: failed — {result}")
+            console.print(f"  ⚠️ {name}: failed — {result}")
         else:
             intel_sections.append(result)
-            print(f"  ✅ {name}: complete")
+            console.print(f"  ✅ {name}: complete")
 
     elapsed = perf_counter() - started_at
-    print(f"✅ Competitor intelligence complete in {elapsed:.1f}s")
+    console.print(f"✅ Competitor intelligence complete in {elapsed:.1f}s")
 
     # Build output report
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -239,68 +240,8 @@ async def run_compete(
     source_name = Path(report_path).stem
     output_path = Path(f"compete_{source_name}.md")
     output_path.write_text(output, encoding="utf-8")
-    print(f"📄 Report saved to: {output_path}")
+    console.print(f"📄 Report saved to: {output_path}")
     return str(output_path)
 
 
-async def main() -> None:
-    import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Run competitor intelligence on arxiv2product report ideas.",
-    )
-    parser.add_argument(
-        "report",
-        nargs="?",
-        help="Path to an existing arxiv2product report markdown file.",
-    )
-    parser.add_argument(
-        "--ideas",
-        type=str,
-        default=None,
-        help="Comma-separated idea ranks to analyze (e.g., 1,2,3).",
-    )
-    parser.add_argument(
-        "--idea",
-        type=str,
-        default=None,
-        help="Name of a specific idea to analyze.",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=os.getenv("ARXIV2PRODUCT_MODEL", DEFAULT_MODEL),
-        help="Model to use for analysis.",
-    )
-    args = parser.parse_args()
-
-    if not args.report and not args.idea:
-        parser.print_help()
-        raise SystemExit(1)
-
-    idea_indices = None
-    if args.ideas:
-        idea_indices = [int(x.strip()) for x in args.ideas.split(",")]
-
-    if args.report:
-        if not Path(args.report).exists():
-            print(f"Error: Report file not found: {args.report}", file=sys.stderr)
-            raise SystemExit(1)
-
-    try:
-        await run_compete(
-            report_path=args.report,
-            idea_indices=idea_indices,
-            idea_name=args.idea,
-            model=args.model,
-        )
-    except AgenticaConnectionError as exc:
-        print(f"Agentica connection error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
-    except AgentExecutionError as exc:
-        print(f"Agent execution error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
-
-
-def run() -> None:
-    asyncio.run(main())
