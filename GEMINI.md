@@ -62,6 +62,13 @@ uv run python -m unittest discover -s tests
 - `cli/agentica-docs.md`: Reference for the Agentica framework used in this project.
 - `AGENTS.md`: Specific behavioral and structural mandates for AI assistants working in this repo.
 
+---
+
+## Roadmap & Future Directions
+- **FastMCP Integration**: Implement a Model Context Protocol server using `FastMCP` to allow any AI agent (Cursor, Windsurf, Claude Desktop) to use the 5-phase pipeline as a set of standardized tools.
+- **Dynamic Resource Provisioning**: Expose generated reports and extracted technical primitives as MCP Resources for RAG-based agent reasoning.
+- **Advanced Code Skimming**: Deepen the GitHub integration to perform automated AST-based analysis of repository sections during the Decomposer phase.
+
 ### Agent Configuration
 - **Prompts:** Centralized in `cli/arxiv2product/prompts.py` as `UPPER_SNAKE_CASE` constants.
 - **Execution:** Uses the `spawn` + `agent.call` pattern from `agentica`.
