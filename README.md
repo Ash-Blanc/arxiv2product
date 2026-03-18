@@ -147,7 +147,13 @@ curl http://127.0.0.1:8010/reports/job-abc123
 
 ## Configuration
 
-Copy `cli/.env.example` to `cli/.env` and configure:
+The CLI looks for `.env` in this order:
+1. Current working directory: `./.env`
+2. `./cli/.env`
+3. Project root (parent of cli): `../.env`
+4. `~/.arxiv2product/.env` (recommended for uv tool installations)
+
+Copy `cli/.env.example` to one of the above locations and configure:
 
 ### Execution Backend
 
