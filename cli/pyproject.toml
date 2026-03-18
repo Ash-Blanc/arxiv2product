@@ -4,6 +4,19 @@ version = "0.1.0"
 description = "Generate product ideas from arXiv papers with a multi-agent pipeline."
 readme = "README.md"
 requires-python = ">=3.13"
+authors = [
+    { name = "Ash-Blanc", email = "angelash18092007@gmail.com" }
+]
+license = { text = "MIT" }
+keywords = ["arxiv", "ai", "agents", "startup", "product", "research"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "arxiv",
     "fastapi",
@@ -20,6 +33,10 @@ dependencies = [
 
 [project.scripts]
 arxiv2product = "arxiv2product.cli:main"
+
+[project.urls]
+Repository = "https://github.com/Ash-Blanc/arxiv2product"
+Issues = "https://github.com/Ash-Blanc/arxiv2product/issues"
 
 [tool.uv]
 package = true

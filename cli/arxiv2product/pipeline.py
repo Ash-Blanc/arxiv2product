@@ -385,33 +385,41 @@ def build_compact_paper_context(
 
 
 async def _run_pipeline_with_agentica(
-    arxiv_id_or_url: str, model: str = DEFAULT_MODEL
+    arxiv_ids: list[str], model: str = DEFAULT_MODEL
 ) -> str:
     """Run the pipeline using Agentica as the execution backend."""
     if not _agent_logs_enabled():
         set_default_agent_listener(None)
     speed_profile = _get_speed_profile()
-    console.print(f"📄 Fetching paper: {arxiv_id_or_url}")
-    paper = await fetch_paper(arxiv_id_or_url)
-    console.print(f"✅ Loaded: {paper.title} ({len(paper.full_text)} chars)")
+    
+    console.print(f"📄 Fetching {len(arxiv_ids)} paper(s): {', '.join(arxiv_ids)}")
+    papers = await asyncio.gather(*(fetch_paper(aid) for aid in arxiv_ids))
+    titles = [p.title for p in papers]
+    console.print(f"✅ Loaded: {titles}")
     console.print(f"⚙️ Speed profile: {speed_profile}")
 
-    full_context = build_full_paper_context(paper)
+    full_context = "\n\n---\n\n".join(
+        [f"PAPER {i+1}:\n{build_full_paper_context(p)}" for i, p in enumerate(papers)]
+    )
     console.print(f"🧠 Phase 1 context: {len(full_context)} chars")
 
     phase_started_at = _phase_started("🔬 Phase 1: Extracting technical primitives...")
     decomposer = await spawn_agent(premise=DECOMPOSER_PREMISE, model=model)
     primitives_raw = await call_agent_text(
         decomposer,
-        f"Analyze this paper and extract all atomic technical primitives:\n\n{full_context}",
+        f"Analyze these research papers and extract all atomic technical primitives. "
+        f"Think about interaction hooks between elements of DIFFERENT papers.\n\n{full_context}",
         phase="technical primitive extraction",
     )
     _phase_finished("Phase 1", phase_started_at)
     primitives_summary = _truncate_text(primitives_raw, PRIMITIVE_SUMMARY_CHARS)
-    compact_context = build_compact_paper_context(
-        paper,
-        primitives_summary=primitives_summary,
+    
+    compact_context = "\n\n---\n\n".join(
+        [f"PAPER {i+1} SUMMARY:\n{p.title}\n{p.abstract}" for i, p in enumerate(papers)]
     )
+    if primitives_summary:
+        compact_context += "\n\nTECHNICAL PRIMITIVES SUMMARY:\n" + primitives_summary
+
     console.print(f"🧠 Downstream context: {len(compact_context)} chars")
 
     phase_started_at = _phase_started("🚀 Phase 2: Running parallel analysis agents...")
@@ -443,22 +451,22 @@ async def _run_pipeline_with_agentica(
     pain_task = call_agent_text(
         pain_agent,
         f"Technical primitives:\n\n{primitives_summary}\n\n"
-        f"Paper context:\n{compact_context}\n\n"
+        f"Consolidated context:\n{compact_context}\n\n"
         "Search the web to find real, current market pain mapping to these primitives. "
-        "Go FAR beyond the paper's own domain.",
+        "Go FAR beyond the papers' own domain.",
         phase="pain scanner",
     )
     infra_task = call_agent_text(
         infra_agent,
-        f"Paper context:\n{compact_context}\n\n"
+        f"Consolidated context:\n{compact_context}\n\n"
         f"Technical primitives:\n{primitives_summary}\n\n"
-        "What NEW problems does widespread adoption of this technique CREATE? "
+        "What NEW problems does widespread adoption of these techniques CREATE? "
         "What products solve those second-order problems?",
         phase="infrastructure inversion",
     )
     temporal_task = call_agent_text(
         temporal_agent,
-        f"Paper context:\n{compact_context}\n\n"
+        f"Consolidated context:\n{compact_context}\n\n"
         f"Technical primitives:\n{primitives_summary}\n\n"
         "Identify temporal arbitrage windows. What can be built RIGHT NOW that "
         "won't be obvious for 12-24 months? Search the web for recent related "
@@ -484,81 +492,79 @@ async def _run_pipeline_with_agentica(
         ),
     )
 
-    phase_started_at = _phase_started("🧬 Phase 3: Cross-pollination...")
+    phase_started_at = _phase_started("🧬 Phase 3: Compound Synthesis...")
     crosspoll_agent = await spawn_agent(
         premise=CROSSPOLLINATOR_PREMISE,
         model=model,
     )
     crosspoll_raw = await call_agent_text(
         crosspoll_agent,
-        f"Technical primitives:\n{primitives_summary}\n\n"
+        f"Technical primitives (Elements):\n{primitives_summary}\n\n"
         f"Market pain points found:\n{_truncate_text(pain_raw, PAIN_SUMMARY_CHARS)}\n\n"
-        "Force non-obvious cross-pollination. Skip direct/obvious matches.",
-        phase="cross-pollination",
+        "Synthesize multiple primitives into 'Compound Opportunities'. "
+        "Think about architectural hints for how these elements bond.",
+        phase="compound synthesis",
     )
     _phase_finished("Phase 3", phase_started_at)
 
-    phase_started_at = _phase_started("💀 Phase 4: Red team destruction...")
-    all_ideas = (
-        f"=== IDEAS FROM PAIN MAPPING ===\n{_truncate_text(pain_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== IDEAS FROM CROSS-POLLINATION ===\n{_truncate_text(crosspoll_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== IDEAS FROM INFRASTRUCTURE INVERSION ===\n{_truncate_text(infra_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== IDEAS FROM TEMPORAL ARBITRAGE ===\n{_truncate_text(temporal_raw, IDEA_SUMMARY_CHARS)}\n\n"
-    )
-    destroyer_scope = (
-        {"web_search": make_web_search_tool(default_intent="fast")}
-        if _redteam_search_enabled()
-        else {"web_search": make_disabled_web_search_tool()}
-    )
-    destroyer = await spawn_agent(
+    phase_started_at = _phase_started("🛡️  Phase 4: Structural Simulation (Red Team)...")
+    destroyer_trace = SearchTrace(section_name="Structural Simulation")
+    destroyer_agent = await spawn_agent(
         premise=DESTROYER_PREMISE,
         model=model,
-        scope=destroyer_scope,
+        scope={
+            "web_search": make_web_search_tool(
+                default_intent="fresh",
+                trace=destroyer_trace,
+            )
+        }
+        if _redteam_search_enabled()
+        else {"web_search": make_disabled_web_search_tool()},
     )
     redteam_raw = await call_agent_text(
-        destroyer,
-        "Here are product ideas from a research paper. Destroy every one.\n\n"
-        f"Paper: {paper.title}\n\n{all_ideas}",
-        phase="red team destruction",
+        destroyer_agent,
+        f"Consolidated context:\n{compact_context}\n\n"
+        f"Technical primitives:\n{primitives_summary}\n\n"
+        f"Candidate compound opportunities:\n{crosspoll_raw}\n\n"
+        "Simulate failure modes. Be brutal on mechanical logic, fair on potential.",
+        phase="structural simulation",
     )
-    _phase_finished(
-        "Phase 4",
-        phase_started_at,
-        details="(red-team search disabled)" if not _redteam_search_enabled() else "",
-    )
+    _phase_finished("Phase 4", phase_started_at)
 
     phase_started_at = _phase_started("🎯 Phase 5: Final synthesis...")
-    synthesizer = await spawn_agent(premise=SYNTHESIZER_PREMISE, model=model)
+    synthesizer_agent = await spawn_agent(premise=SYNTHESIZER_PREMISE, model=model)
     final_raw = await call_agent_text(
-        synthesizer,
-        f"PAPER: {paper.title}\nABSTRACT: {paper.abstract}\n\n"
-        f"=== TECHNICAL PRIMITIVES ===\n{primitives_summary}\n\n"
-        f"=== MARKET PAIN MAPPING ===\n{_truncate_text(pain_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== CROSS-POLLINATED IDEAS ===\n{_truncate_text(crosspoll_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== INFRASTRUCTURE INVERSION ===\n{_truncate_text(infra_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== TEMPORAL ARBITRAGE ===\n{_truncate_text(temporal_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== RED TEAM DESTRUCTION RESULTS ===\n{_truncate_text(redteam_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        "Synthesize all of the above into a final ranked list of the BEST ideas. "
-        "Only include ideas that survived red-teaming or were strengthened by it.",
+        synthesizer_agent,
+        f"Consolidated primitives:\n{primitives_summary}\n\n"
+        f"Market analysis:\n{_truncate_text(pain_raw, PAIN_SUMMARY_CHARS)}\n\n"
+        f"Compound opportunities & hints:\n{_truncate_text(crosspoll_raw, IDEA_SUMMARY_CHARS)}\n\n"
+        f"Simulation failure modes:\n{_truncate_text(redteam_raw, IDEA_SUMMARY_CHARS)}\n\n"
+        "Synthesize these into a final ranked set of actionable Product Compounds.",
         phase="final synthesis",
     )
     _phase_finished("Phase 5", phase_started_at)
 
+    # Use the primary paper for reporting metadata
+    primary_paper = papers[0]
     report = build_report(
-        paper=paper,
+        paper=primary_paper,
         primitives=primitives_raw,
         pain=pain_raw,
+        pain_sources=pain_trace.render_markdown(),
         crosspoll=crosspoll_raw,
         infra=infra_raw,
         temporal=temporal_raw,
-        pain_sources=pain_trace.render_markdown(),
         temporal_sources=temporal_trace.render_markdown(),
         redteam=redteam_raw,
-        redteam_sources="",
+        redteam_sources=destroyer_trace.render_markdown()
+        if _redteam_search_enabled()
+        else "",
         final=final_raw,
     )
 
-    safe_id = paper.arxiv_id.replace("/", "_").replace(".", "_")
+    safe_id = primary_paper.arxiv_id.replace("/", "_").replace(".", "_")
+    if len(papers) > 1:
+        safe_id += f"_plus_{len(papers)-1}_others"
     output_path = Path(f"products_{safe_id}.md")
     output_path.write_text(report, encoding="utf-8")
 
@@ -568,17 +574,20 @@ async def _run_pipeline_with_agentica(
 
 
 async def _run_pipeline_with_openai_compatible(
-    arxiv_id_or_url: str,
+    arxiv_ids: list[str],
     model: str,
     backend: OpenAICompatibleBackend,
 ) -> str:
-    console.print(f"📄 Fetching paper: {arxiv_id_or_url}")
-    paper = await fetch_paper(arxiv_id_or_url)
-    console.print(f"✅ Loaded: {paper.title} ({len(paper.full_text)} chars)")
+    console.print(f"📄 Fetching {len(arxiv_ids)} paper(s): {', '.join(arxiv_ids)}")
+    papers = await asyncio.gather(*(fetch_paper(aid) for aid in arxiv_ids))
+    titles = [p.title for p in papers]
+    console.print(f"✅ Loaded: {titles}")
     console.print("⚙️ Execution backend: openai_compatible")
     console.print(f"⚙️ Speed profile: {_get_speed_profile()}")
 
-    full_context = build_full_paper_context(paper)
+    full_context = "\n\n---\n\n".join(
+        [f"PAPER {i+1}:\n{build_full_paper_context(p)}" for i, p in enumerate(papers)]
+    )
     console.print(f"🧠 Phase 1 context: {len(full_context)} chars")
 
     phase_started_at = _phase_started("🔬 Phase 1: Extracting technical primitives...")
@@ -586,8 +595,8 @@ async def _run_pipeline_with_openai_compatible(
         backend,
         system_prompt=DECOMPOSER_PREMISE,
         user_prompt=(
-            "Analyze this paper and extract all atomic technical primitives:\n\n"
-            f"{full_context}"
+            "Analyze these research papers and extract all atomic technical primitives. "
+            f"Think about interaction hooks between elements of DIFFERENT papers.\n\n{full_context}"
         ),
         phase="technical primitive extraction",
         model=model,
@@ -596,10 +605,12 @@ async def _run_pipeline_with_openai_compatible(
     _phase_finished("Phase 1", phase_started_at)
 
     primitives_summary = _truncate_text(primitives_raw, PRIMITIVE_SUMMARY_CHARS)
-    compact_context = build_compact_paper_context(
-        paper,
-        primitives_summary=primitives_summary,
+    compact_context = "\n\n---\n\n".join(
+        [f"PAPER {i+1} SUMMARY:\n{p.title}\n{p.abstract}" for i, p in enumerate(papers)]
     )
+    if primitives_summary:
+        compact_context += "\n\nTECHNICAL PRIMITIVES SUMMARY:\n" + primitives_summary
+
     console.print(f"🧠 Downstream context: {len(compact_context)} chars")
 
     pain_trace = SearchTrace(section_name="Market Pain Mapping")
@@ -609,10 +620,13 @@ async def _run_pipeline_with_openai_compatible(
         "🚀 Phase 2: Running parallel analysis backend calls..."
     )
 
+    # Note: build_search_packet uses primary paper metadata for simplicity
+    primary_paper = papers[0]
+
     async def get_pain_raw():
         pain_search_packet = await build_search_packet(
             backend=backend,
-            paper=paper,
+            paper=primary_paper,
             primitives_summary=primitives_summary,
             trace=pain_trace,
             phase="pain scanner",
@@ -624,7 +638,7 @@ async def _run_pipeline_with_openai_compatible(
             system_prompt=PAIN_SCANNER_PREMISE,
             user_prompt=(
                 f"Technical primitives:\n{primitives_summary}\n\n"
-                f"Paper context:\n{compact_context}\n\n"
+                f"Consolidated context:\n{compact_context}\n\n"
                 f"External market evidence:\n{pain_search_packet}\n\n"
                 "Find the strongest current market pain points linked to these primitives."
             ),
@@ -638,9 +652,9 @@ async def _run_pipeline_with_openai_compatible(
             backend,
             system_prompt=INFRA_INVERSION_PREMISE,
             user_prompt=(
-                f"Paper context:\n{compact_context}\n\n"
+                f"Consolidated context:\n{compact_context}\n\n"
                 f"Technical primitives:\n{primitives_summary}\n\n"
-                "What new problems does widespread adoption of this technique create?"
+                "What new problems does widespread adoption of these techniques create?"
             ),
             phase="infrastructure inversion",
             model=model,
@@ -650,7 +664,7 @@ async def _run_pipeline_with_openai_compatible(
     async def get_temporal_raw():
         temporal_search_packet = await build_search_packet(
             backend=backend,
-            paper=paper,
+            paper=primary_paper,
             primitives_summary=primitives_summary,
             trace=temporal_trace,
             phase="temporal arbitrage",
@@ -661,10 +675,10 @@ async def _run_pipeline_with_openai_compatible(
             backend,
             system_prompt=TEMPORAL_PREMISE,
             user_prompt=(
-                f"Paper context:\n{compact_context}\n\n"
+                f"Consolidated context:\n{compact_context}\n\n"
                 f"Technical primitives:\n{primitives_summary}\n\n"
                 f"External evidence:\n{temporal_search_packet}\n\n"
-                "Identify temporal arbitrage windows for the paper."
+                "Identify temporal arbitrage windows for the consolidated primitives."
             ),
             phase="temporal arbitrage",
             model=model,
@@ -689,36 +703,37 @@ async def _run_pipeline_with_openai_compatible(
         ),
     )
 
-    phase_started_at = _phase_started("🧬 Phase 3: Cross-pollination...")
+    phase_started_at = _phase_started("🧬 Phase 3: Compound Synthesis...")
     crosspoll_raw = await call_direct_text(
         backend,
         system_prompt=CROSSPOLLINATOR_PREMISE,
         user_prompt=(
-            f"Technical primitives:\n{primitives_summary}\n\n"
+            f"Technical primitives (Elements):\n{primitives_summary}\n\n"
             f"Market pain points found:\n{_truncate_text(pain_raw, PAIN_SUMMARY_CHARS)}\n\n"
-            "Force non-obvious cross-pollination. Skip direct or obvious matches."
+            "Synthesize multiple primitives into 'Compound Opportunities'. "
+            "Think about architectural hints for how these elements bond."
         ),
-        phase="cross-pollination",
+        phase="compound synthesis",
         model=model,
         max_tokens=_phase_max_tokens("cross-pollination"),
     )
     _phase_finished("Phase 3", phase_started_at)
 
-    phase_started_at = _phase_started("💀 Phase 4: Red team destruction...")
+    phase_started_at = _phase_started("🛡️  Phase 4: Structural Simulation (Red Team)...")
     all_ideas = (
-        f"=== IDEAS FROM PAIN MAPPING ===\n{_truncate_text(pain_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== IDEAS FROM CROSS-POLLINATION ===\n{_truncate_text(crosspoll_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== IDEAS FROM INFRASTRUCTURE INVERSION ===\n{_truncate_text(infra_raw, IDEA_SUMMARY_CHARS)}\n\n"
-        f"=== IDEAS FROM TEMPORAL ARBITRAGE ===\n{_truncate_text(temporal_raw, IDEA_SUMMARY_CHARS)}\n\n"
+        f"=== COMPOUNDS FROM PAIN MAPPING ===\n{_truncate_text(pain_raw, IDEA_SUMMARY_CHARS)}\n\n"
+        f"=== COMPOUNDS FROM SYNTHESIS ===\n{_truncate_text(crosspoll_raw, IDEA_SUMMARY_CHARS)}\n\n"
+        f"=== COMPOUNDS FROM INFRASTRUCTURE INVERSION ===\n{_truncate_text(infra_raw, IDEA_SUMMARY_CHARS)}\n\n"
+        f"=== COMPOUNDS FROM TEMPORAL ARBITRAGE ===\n{_truncate_text(temporal_raw, IDEA_SUMMARY_CHARS)}\n\n"
     )
     redteam_raw = await call_direct_text(
         backend,
         system_prompt=DESTROYER_PREMISE,
         user_prompt=(
-            "Here are product ideas from a research paper. Destroy every one.\n\n"
-            f"Paper: {paper.title}\n\n{all_ideas}"
+            "Here are product compounds from research. Simulate failure modes.\n\n"
+            f"Papers: {', '.join(titles)}\n\n{all_ideas}"
         ),
-        phase="red team destruction",
+        phase="structural simulation",
         model=model,
         max_tokens=_phase_max_tokens("red team destruction"),
     )
@@ -731,14 +746,11 @@ async def _run_pipeline_with_openai_compatible(
         backend,
         system_prompt=SYNTHESIZER_PREMISE,
         user_prompt=(
-            f"PAPER: {paper.title}\nABSTRACT: {paper.abstract}\n\n"
-            f"=== TECHNICAL PRIMITIVES ===\n{primitives_summary}\n\n"
-            f"=== MARKET PAIN MAPPING ===\n{_truncate_text(pain_raw, IDEA_SUMMARY_CHARS)}\n\n"
-            f"=== CROSS-POLLINATED IDEAS ===\n{_truncate_text(crosspoll_raw, IDEA_SUMMARY_CHARS)}\n\n"
-            f"=== INFRASTRUCTURE INVERSION ===\n{_truncate_text(infra_raw, IDEA_SUMMARY_CHARS)}\n\n"
-            f"=== TEMPORAL ARBITRAGE ===\n{_truncate_text(temporal_raw, IDEA_SUMMARY_CHARS)}\n\n"
-            f"=== RED TEAM DESTRUCTION RESULTS ===\n{_truncate_text(redteam_raw, IDEA_SUMMARY_CHARS)}\n\n"
-            "Synthesize all of the above into a final ranked list of the best ideas."
+            f"Consolidated primitives:\n{primitives_summary}\n\n"
+            f"Market analysis:\n{_truncate_text(pain_raw, PAIN_SUMMARY_CHARS)}\n\n"
+            f"Compound opportunities & hints:\n{_truncate_text(crosspoll_raw, IDEA_SUMMARY_CHARS)}\n\n"
+            f"Simulation failure modes:\n{_truncate_text(redteam_raw, IDEA_SUMMARY_CHARS)}\n\n"
+            "Synthesize these into a final ranked set of actionable Product Compounds."
         ),
         phase="final synthesis",
         model=model,
@@ -747,7 +759,7 @@ async def _run_pipeline_with_openai_compatible(
     _phase_finished("Phase 5", phase_started_at)
 
     report = build_report(
-        paper=paper,
+        paper=primary_paper,
         primitives=primitives_raw,
         pain=pain_raw,
         pain_sources=pain_trace.render_markdown(),
@@ -760,7 +772,9 @@ async def _run_pipeline_with_openai_compatible(
         final=final_raw,
     )
 
-    safe_id = paper.arxiv_id.replace("/", "_").replace(".", "_")
+    safe_id = primary_paper.arxiv_id.replace("/", "_").replace(".", "_")
+    if len(papers) > 1:
+        safe_id += f"_plus_{len(papers)-1}_others"
     output_path = Path(f"products_{safe_id}.md")
     output_path.write_text(report, encoding="utf-8")
 
@@ -770,7 +784,7 @@ async def _run_pipeline_with_openai_compatible(
 
 
 async def run_pipeline(
-    arxiv_id_or_url: str,
+    arxiv_id_or_url: str | list[str],
     model: str = DEFAULT_MODEL,
     save: bool = True,
     output_path: Optional[str] = None,
@@ -779,21 +793,30 @@ async def run_pipeline(
     search_papers: bool = False,
 ) -> str:
     """Run the paper-to-product pipeline using the configured execution backend."""
+    arxiv_ids: list[str] = []
+
     # Phase 0 (optional): PASA-style paper search for topic queries
-    if search_papers and is_topic_query(arxiv_id_or_url):
+    if search_papers and isinstance(arxiv_id_or_url, str) and is_topic_query(arxiv_id_or_url):
         results = await run_paper_search(arxiv_id_or_url, model=model)
         if not results:
             raise AgentExecutionError(
                 f"Paper search found no relevant papers for topic: {arxiv_id_or_url}"
             )
-        top_paper = results[0]
-        console.print(f"📄 Selected top paper: [{top_paper.arxiv_id}] {top_paper.title}")
-        arxiv_id_or_url = top_paper.arxiv_id
+        # Pick top 2 papers for compound synthesis
+        top_papers = results[:2]
+        for p in top_papers:
+            console.print(f"📄 Selected paper: [{p.arxiv_id}] {p.title}")
+            arxiv_ids.append(p.arxiv_id)
+    else:
+        if isinstance(arxiv_id_or_url, str):
+            arxiv_ids = [arxiv_id_or_url]
+        else:
+            arxiv_ids = arxiv_id_or_url
 
     backend_name = get_execution_backend_name()
     if backend_name == OPENAI_COMPATIBLE_BACKEND:
         backend = build_openai_compatible_backend()
         return await _run_pipeline_with_openai_compatible(
-            arxiv_id_or_url, model, backend
+            arxiv_ids, model, backend
         )
-    return await _run_pipeline_with_agentica(arxiv_id_or_url, model)
+    return await _run_pipeline_with_agentica(arxiv_ids, model)

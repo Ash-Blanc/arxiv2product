@@ -86,7 +86,7 @@ class PipelineAsyncTests(unittest.IsolatedAsyncioTestCase):
             output = await run_pipeline("2603.09229")
 
         self.assertEqual(output, "products_2603_09229.md")
-        run_direct.assert_awaited_once_with("2603.09229", "anthropic/claude-sonnet-4", "backend")
+        run_direct.assert_awaited_once_with(["2603.09229"], "anthropic/claude-sonnet-4", "backend")
         run_agentica.assert_not_awaited()
 
 
