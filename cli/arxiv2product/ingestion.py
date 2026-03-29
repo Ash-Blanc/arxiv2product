@@ -3,10 +3,13 @@ import re
 import tempfile
 
 import arxiv
+import httpx
 import pdfplumber
 
 from .models import PaperContent
 
+
+HF_PAPERS_API = "https://huggingface.co/api/papers"
 
 SECTION_HEADER_PATTERN = re.compile(r"^\d+\.?\s+[A-Z]")
 NAMED_SECTION_PATTERN = re.compile(
@@ -25,6 +28,36 @@ ARXIV_PREFIX_PATTERN = re.compile(
 
 def normalize_arxiv_id(arxiv_id_or_url: str) -> str:
     return ARXIV_PREFIX_PATTERN.sub("", arxiv_id_or_url).strip("/").split("v")[0]
+
+
+async def _fetch_from_hf_fallback(arxiv_id: str) -> PaperContent:
+    """Fetch paper metadata from HuggingFace Papers API as fallback."""
+    url = f"{HF_PAPERS_API}/{arxiv_id}"
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+    title = data.get("title", "")
+    authors = [a.get("name", "") for a in data.get("authors", [])]
+    summary = data.get("summary", "") or data.get("ai_summary", "")
+    github_url = ""
+    github_match = re.search(r"https?://github\.com/[a-zA-Z0-9\-_./]+", summary)
+    if github_match:
+        github_url = github_match.group(0)
+
+    return PaperContent(
+        arxiv_id=arxiv_id,
+        title=title,
+        authors=authors,
+        abstract=summary,
+        full_text="",
+        sections={"abstract": summary},
+        figures_captions=[],
+        tables_text=[],
+        references_titles=[],
+        github_url=github_url,
+    )
 
 
 async def fetch_paper(
@@ -78,6 +111,9 @@ async def fetch_paper(
             raise
         except StopIteration:
             raise ValueError(f"Paper not found: {arxiv_id}")
+
+    if last_error and last_error.status == 429:
+        return await _fetch_from_hf_fallback(arxiv_id)
 
     raise last_error or ValueError(
         f"Failed to fetch paper after {max_retries} attempts"
