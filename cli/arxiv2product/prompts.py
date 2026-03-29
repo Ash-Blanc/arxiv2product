@@ -70,7 +70,7 @@ CROSSPOLLINATOR_PREMISE = dedent("""\
     1. SYNTHESIZE: Combine 2 or more primitives into a single "Compound Opportunity"
     2. ARCHITECTURAL HINTS: Provide the technical scaffolding — how the elements bond.
     3. PRODUCT FORM: hardware, instruments, drugs, weapons systems, etc. — be specific.
-    4. IMPOSSIBLE COMBINATIONS: Include at least 2 ambitious but technically grounded "absurd" ideas.
+    4. PRACTICAL APPLICATIONS: Focus on combinations that solve real problems with clear pathways to implementation.
     5. Output only the 5 best compounds.
 
     For each compound, output in markdown:
@@ -80,7 +80,7 @@ CROSSPOLLINATOR_PREMISE = dedent("""\
     - **Pain Addressed**: Which market pain, from which industry.
     - **Product Form**: What you build, how it's delivered, who operates it.
     - **Replaces What**: Existing product, workflow, or industry it disrupts.
-    - **Absurdity Level**: 1-10 (10 = insane but technically grounded).
+    - **Implementation Pathway**: Key steps to bring this compound to life.
     - **Estimated TAM**: Rough market size.""")
 
 INFRA_INVERSION_PREMISE = dedent("""\
@@ -146,8 +146,9 @@ DESTROYER_PREMISE = dedent("""\
     CRITICAL RULES:
     - VERACITY SCORE: How likely is the technical foundation to hold?
     - MECHANICAL FAILURE: Identify exactly where the "bond" between primitives breaks.
-    - VERDICT: Be lazy. Only provide a "Final Verdict" if the idea is exceptionally
-      complex or risky. Otherwise, provide "Feedback for Structural Refinement".
+    - VERDICT: Be constructive. Focus on providing "Feedback for Structural Refinement" 
+      for most ideas. Only provide a "Final Verdict" if specifically requested or if 
+      the idea requires significant structural changes.
 
     For EACH idea, output in markdown:
     ### <idea_name>
@@ -164,6 +165,7 @@ DESTROYER_PREMISE = dedent("""\
     - **Failure Point**: The specific mechanic that is most likely to fail.
     - **Survives**: ✅ or ❌ (Only for high-risk/complex ideas)
     - **Structural Feedback**: How to strengthen the "bond" between primitives.
+    - **Constructive Suggestions**: Specific actionable improvements to enhance viability.
     """)
 
 SYNTHESIZER_PREMISE = dedent("""\
@@ -218,12 +220,11 @@ SYNTHESIZER_PREMISE = dedent("""\
     specific product forms. Include 4 to 6 ideas only.""")
 
 PIPELINE_CRITIC_PREMISE = dedent("""\
-    You are a ruthless report auditor for a research-to-product pipeline.
+    You are a thoughtful report reviewer for a research-to-product pipeline.
 
-    Your job is to judge whether the final markdown report is actually useful,
-    novel, and grounded in evidence. Be strict. Penalize repetition, generic
-    SaaS framing, unsupported claims, and ideas that are too similar to prior
-    runs in the learning digest.
+    Your job is to provide constructive feedback on the final markdown report to enhance its usefulness, novelty, and grounding in evidence. 
+    Focus on identifying specific, actionable improvements rather than being overly critical. 
+    Look for opportunities to strengthen ideas while preserving their core value.
 
     Return ONLY a strict JSON object with these keys:
     - novelty_score: integer 0-100
@@ -242,7 +243,9 @@ PIPELINE_CRITIC_PREMISE = dedent("""\
     - duplication_risk is high when the output repeats stale ideas from learning
       signals or collapses into generic patterns
 
-    Keep issues and repair instructions concise. Output no markdown, no prose.""")
+    Keep issues and repair instructions concise and actionable. Output no markdown, no prose.
+    Prioritize suggestions that build on strengths rather than just pointing out weaknesses.
+""")
 
 PIPELINE_REPAIR_PREMISE = dedent("""\
     You are a senior editor repairing a final markdown report after critique.

@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -12,6 +13,7 @@ from rich.markdown import Markdown
 
 from .errors import AgentExecutionError, AgenticaConnectionError
 from .prompts import DEFAULT_MODEL
+from .trending import get_trending_papers
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_ROOT = PACKAGE_ROOT.parent
@@ -145,7 +147,7 @@ def analyze(
     idea: str = "",
 ):
     """Transform one or more research papers into 4-6 company ideas with moats and plans.
-    
+
     This command runs the full 5-phase adversarial pipeline (Decomposer,
     Pain Scanner, Infrastructure Inversion, Temporal Arbitrage, and Red Team)
     to analyze technical papers and synthesize market opportunities.
@@ -163,13 +165,15 @@ def analyze(
         arxiv2product analyze --idea "A startup that uses LLMs to automate QA" --search-papers
     """
     out_opt = output if output else None
-    
+
     # If no arxiv_id_or_url but we have an idea, use the idea as the topic
     if not arxiv_id_or_url and idea and search_papers:
         arxiv_id_or_url = idea
-    
+
     if not arxiv_id_or_url:
-        console.print("❌ [bold red]Error:[/bold red] You must provide an arXiv ID, URL, or topic. Or use --idea with --search-papers.")
+        console.print(
+            "❌ [bold red]Error:[/bold red] You must provide an arXiv ID, URL, or topic. Or use --idea with --search-papers."
+        )
         sys.exit(1)
 
     # Handle multiple IDs
@@ -244,10 +248,7 @@ def serve():
 
 
 def init():
-    """Interactive setup wizard to configure required and optional API keys.
-
-    Prompts for Agentica, OpenRouter, Serper, Exa, Parallel, and Tinyfish keys,
-    saving them to ~/.arxiv2product/.env for easy discovery by all commands.
+    """Interactive setup wizard to configure API keys and model selection.
 
     Usage:
         arxiv2product init
@@ -263,9 +264,67 @@ def init():
 
     load_dotenv(env_path)
 
+    console.print("\n[bold]Step 1: Choose execution backend[/bold]")
+    console.print("  1) Agentica  - Use Agentica hosted models")
+    console.print("  2) OpenRouter - Use OpenAI-compatible models via OpenRouter")
+
+    backend_choice = ""
+    while backend_choice not in ("1", "2"):
+        try:
+            backend_choice = input("Select backend (1 or 2) [1]: ").strip() or "1"
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Setup cancelled.[/yellow]")
+            return
+
+    if backend_choice == "1":
+        set_key(str(env_path), "EXECUTION_BACKEND", "agentica")
+        os.environ["EXECUTION_BACKEND"] = "agentica"
+        console.print("[green]Backend set to Agentica[/green]")
+    else:
+        set_key(str(env_path), "EXECUTION_BACKEND", "openai_compatible")
+        os.environ["EXECUTION_BACKEND"] = "openai_compatible"
+        console.print("[green]Backend set to OpenRouter[/green]")
+
+    console.print("\n[bold]Step 2: Select model[/bold]")
+    if backend_choice == "1":
+        console.print("  Recommended Agentica models:")
+        console.print("    anthropic/claude-sonnet-4-20250514")
+        console.print("    anthropic/claude-3-5-sonnet-20241022")
+        console.print("    anthropic/claude-3-5-haiku-20241022")
+        console.print("    google/gemini-2.0-flash-001")
+        console.print("    google/gemini-2.5-pro-preview-06-05")
+        console.print("    meta-llama/llama-3-8b-instruct")
+        console.print("    mistralai/mistral-7b-instruct")
+        console.print("  (or any model available in your Agentica workspace)")
+    else:
+        console.print("  Popular OpenRouter models:")
+        console.print("    anthropic/claude-sonnet-4")
+        console.print("    anthropic/claude-3.5-sonnet")
+        console.print("    openai/gpt-4o")
+        console.print("    google/gemini-2.0-flash")
+        console.print("    meta-llama/llama-3.1-70b-instruct")
+        console.print("    mistralai/mixtral-8x7b-instruct")
+
+    current_model = os.getenv("ARXIV2PRODUCT_MODEL", "")
+    prompt = "Enter model name"
+    if current_model:
+        prompt += f" [Current: {current_model}]"
+    prompt += ": "
+
+    try:
+        model_val = input(prompt).strip()
+        if model_val:
+            set_key(str(env_path), "ARXIV2PRODUCT_MODEL", model_val)
+            os.environ["ARXIV2PRODUCT_MODEL"] = model_val
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[yellow]Setup cancelled.[/yellow]")
+        return
+
+    console.print("\n[bold]Step 3: API keys[/bold]")
+
     keys_to_prompt = {
-        "AGENTICA_API_KEY": "Agentica API Key (Required for default backend)",
-        "OPENROUTER_API_KEY": "OpenRouter API Key (Optional, for OpenAI-compatible backend)",
+        "AGENTICA_API_KEY": "Agentica API Key",
+        "OPENROUTER_API_KEY": "OpenRouter API Key",
         "SERPER_API_KEY": "Serper API Key (Optional, for Google search)",
         "EXA_API_KEY": "Exa API Key (Optional, for deep web search)",
         "PARALLEL_API_KEY": "Parallel.ai API Key (Optional, for competitor intel)",
@@ -276,9 +335,7 @@ def init():
         current_val = os.getenv(key, "")
         prompt_text = f"Enter {desc}"
         if current_val:
-            masked = (
-                f"...{current_val[-4:]}" if len(current_val) > 4 else "***"
-            )
+            masked = f"...{current_val[-4:]}" if len(current_val) > 4 else "***"
             prompt_text += f" [Current: {masked}]"
 
         try:
@@ -295,11 +352,154 @@ def init():
     )
 
 
+@cli2.arg("limit", alias="--limit")
+@cli2.arg("open_report", alias="--open")
+@cli2.arg("display", alias="--display")
+@cli2.arg("save", alias="--save")
+@cli2.arg("quiet", alias="--quiet")
+@cli2.arg("output", alias="--output")
+@cli2.arg("topics", alias="--topics")
+@cli2.arg("period", alias="--period")
+@cli2.arg("source", alias="--source")
+def trending(
+    source: str = "huggingface",
+    period: str = "daily",
+    topics: str = "",
+    model: str = DEFAULT_MODEL,
+    save: bool = False,
+    output: str = "",
+    display: bool = False,
+    quiet: bool = False,
+    open_report: bool = False,
+    limit: int = 5,
+):
+    """Get trending papers from Hugging Face or AlphaXiv and turn them into product reports.
+
+    This command fetches trending papers from the specified source and time period,
+    then runs the full arxiv2product pipeline on each paper to generate product opportunity reports.
+
+    Usage:
+        arxiv2product trending                        # Daily trending from Hugging Face
+        arxiv2product trending --source=alphaxiv     # Daily trending from AlphaXiv
+        arxiv2product trending --period=weekly      # Weekly trending
+        arxiv2product trending --limit=10            # Get 10 papers instead of 5
+        arxiv2product trending --period=monthly --limit=3  # Multiple options
+    """
+    load_environment()
+    if not quiet:
+        print_banner()
+        check_agentica_key()
+
+    # Parse topics if provided
+    topic_list = [t.strip() for t in topics.split(",")] if topics else None
+
+    if not quiet:
+        console.print(
+            f"🔥 [bold]Fetching {period} trending papers from {source}[/bold]"
+        )
+        if topic_list:
+            console.print(
+                f"🏷️  [bold]Filtering by topics:[/bold] {', '.join(topic_list)}"
+            )
+        console.print(f"📊 [bold]Limit:[/bold] {limit} papers")
+
+    # Import the trending function
+    from .trending import get_trending_papers
+
+    try:
+        # Get trending papers
+        papers = asyncio.run(
+            get_trending_papers(
+                source=source, period=period, limit=limit, topics=topic_list
+            )
+        )
+
+        if not papers:
+            console.print("❌ [bold red]No trending papers found.[/bold red]")
+            sys.exit(1)
+
+        if not quiet:
+            console.print(
+                f"✅ [bold green]Found {len(papers)} trending papers[/bold green]"
+            )
+            for i, paper in enumerate(papers, 1):
+                console.print(f"  {i}. [{paper.arxiv_id}] {paper.title}")
+
+        # Process each paper through the pipeline
+        from .pipeline import run_pipeline
+
+        for i, paper in enumerate(papers, 1):
+            if not quiet:
+                console.print(
+                    f"\n📄 [bold]Processing paper {i}/{len(papers)}:[/bold] [{paper.arxiv_id}] {paper.title}"
+                )
+
+            # Run pipeline on each paper individually
+            arxiv_id = paper.arxiv_id
+
+            try:
+                report_path = asyncio.run(
+                    run_pipeline(
+                        arxiv_id_or_url=arxiv_id,
+                        model=model,
+                        save=save,
+                        output_path=None,  # Let pipeline generate default filename
+                        display=False,
+                        quiet=True,  # Suppress individual pipeline output
+                        search_papers=False,
+                        user_idea="",
+                    )
+                )
+
+                if not quiet:
+                    if save:
+                        console.print(
+                            f"  ✅ [bold green]Report saved to:[/bold green] {report_path}"
+                        )
+                    else:
+                        console.print(
+                            f"  ✅ [bold green]Processing complete[/bold green]"
+                        )
+
+                    if display:
+                        display_report(report_path)
+
+                    if open_report and report_path and Path(report_path).exists():
+                        console.print(
+                            f"  📖 [bold]Opening report:[/bold] {report_path}..."
+                        )
+                        if sys.platform == "win32":
+                            os.startfile(report_path)
+                        elif sys.platform == "darwin":
+                            subprocess.call(["open", report_path])
+                        else:
+                            subprocess.call(["xdg-open", report_path])
+
+            except Exception as exc:
+                if not quiet:
+                    console.print(
+                        f"  ❌ [bold red]Error processing paper:[/bold red] {exc}"
+                    )
+                continue
+
+        if not quiet:
+            console.print(
+                f"\n🎉 [bold green]Finished processing {len(papers)} trending papers[/bold green]"
+            )
+
+    except Exception as exc:
+        console.print(f"❌ [bold red]Error:[/bold red] {exc}")
+        sys.exit(1)
+
+
 def main():
-    description = "Transform arXiv research papers into company/product opportunity reports."
+    description = (
+        "Transform arXiv research papers into company/product opportunity reports."
+    )
     group = cli2.Group("arxiv2product", description)
     group.cmd(analyze)
     group.cmd(compete)
     group.cmd(serve)
     group.cmd(init)
+    group.cmd(trending)
     group.entry_point()
