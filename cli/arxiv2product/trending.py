@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from typing import List, Optional
-from urllib.parse import urljoin
 
 import httpx
 
@@ -13,7 +12,7 @@ from .ingestion import fetch_paper
 
 
 HF_PAPERS_API_BASE = "https://huggingface.co/api/papers"
-ALPHAXIV_API_BASE = "https://alphaxiv.org/api"
+ALPHAXIV_BASE_URL = "https://alphaxiv.org"
 
 
 async def _fetch_hf_trending_papers(
@@ -43,23 +42,39 @@ async def _fetch_alphaxiv_trending_papers(
     period: str = "daily",
     limit: int = 10,
 ) -> List[dict]:
-    """Fetch trending papers from AlphaXiv API."""
+    """Fetch trending papers from AlphaXiv web interface."""
     if period not in {"daily", "weekly", "monthly"}:
         raise ValueError(
             f"Invalid period: {period}. Must be 'daily', 'weekly', or 'monthly'"
         )
 
-    url = urljoin(ALPHAXIV_API_BASE + "/", f"papers/trending/{period}")
+    sort_map = {"daily": "Hot", "weekly": "Hot", "monthly": "Hot"}
+    sort = sort_map.get(period, "Hot")
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    url = f"{ALPHAXIV_BASE_URL}/?sort={sort}"
+
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         try:
-            response = await client.get(url, params={"limit": limit})
+            response = await client.get(url)
             response.raise_for_status()
-            return response.json()
+            html = response.text
         except httpx.HTTPError as exc:
             raise RuntimeError(
                 f"Failed to fetch AlphaXiv trending papers: {exc}"
             ) from exc
+
+    papers = []
+    pattern = r"paper-assets\.alphaxiv\.org/image/(\d+\.\d+)"
+    matches = re.findall(pattern, html)
+    seen = set()
+    for arxiv_id in matches:
+        if arxiv_id not in seen:
+            seen.add(arxiv_id)
+            papers.append({"arxivId": arxiv_id})
+            if len(papers) >= limit:
+                break
+
+    return papers
 
 
 async def _convert_hf_paper_to_content(paper_data: dict) -> Optional[PaperContent]:
@@ -79,12 +94,6 @@ async def _convert_alphaxiv_paper_to_content(
     """Convert AlphaXiv paper data to PaperContent object."""
     try:
         arxiv_id = paper_data.get("arxivId", "")
-        if not arxiv_id:
-            url = paper_data.get("url", "")
-            arxiv_match = re.search(r"arxiv\.org/(?:abs|pdf)/([^/]+)", url)
-            if arxiv_match:
-                arxiv_id = arxiv_match.group(1)
-
         if not arxiv_id:
             return None
         return await fetch_paper(arxiv_id)
